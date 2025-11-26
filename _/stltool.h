@@ -25,6 +25,9 @@
 #define stricmp _stricmp
 #define strnicmp _strnicmp
 #define strcasecmp _stricmp
+#elif defined(POSIX)
+#define stricmp strcasecmp
+#define strnicmp strncasecmp
 #endif
 
 #if defined(_MSC_VER) && _MSC_VER <= 1200
