@@ -47,7 +47,12 @@ const char* gSatoriLicense =
 //#ifdef SATORI_DLL
 	// Satori‚Ì—Bˆê‚ÌŽÀ‘Ì
 	Satori gSatori;
+#ifdef POSIX
+	int SakuraDLLHost::m_id = 0;
+    std::vector<SakuraDLLHost *> SakuraDLLHost::m_dll(1, &gSatori);
+#else
 	SakuraDLLHost* SakuraDLLHost::m_dll = &gSatori;
+#endif
 //#else
 //	SakuraDLLHost* SakuraDLLHost::m_dll = NULL;
 //#endif // SATORI_DLL
