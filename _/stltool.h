@@ -158,7 +158,7 @@ int	multi_replace(string& str, T* array1, T* array2, int array_size) {
 
 // •¶š—ñÁ‹
 bool	erase_first(string& str, const string& before);
-int	erase(string& str, const string& before);
+int	erase_all(string& str, const string& before);
 // ‘ÎÛŒê‹å‚Ì”‚ğ”‚¦‚é
 int	count(const string& str, const string& target);
 // ‘ÎÛŒê‹å‚Ì‘¶İŠm”F

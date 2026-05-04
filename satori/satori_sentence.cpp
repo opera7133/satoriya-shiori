@@ -23,7 +23,7 @@
 void	diet_script(string& ioScript) {
 	//replace(ioScript, "\\h", "\\0");
 	//replace(ioScript, "\\u", "\\1");
-	erase(ioScript, "\\_w[0]");
+	erase_all(ioScript, "\\_w[0]");
 	int	count;
 	do {
 		count=0;

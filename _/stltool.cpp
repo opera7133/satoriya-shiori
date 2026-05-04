@@ -183,7 +183,7 @@ bool	erase_first(string& str, const string& before) {
 	str.erase(pos, before.size());
 	return	true;
 }
-int	erase(string& str, const string& before) {
+int	erase_all(string& str, const string& before) {
 	if ( str=="" || before=="" ) return 0;
 
 	// •¶š—ñ’·‚ÌŒvZ—p
