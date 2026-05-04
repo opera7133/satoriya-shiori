@@ -167,6 +167,7 @@ bool Sender::send_to_window(const int mode,const char* theBuf)
 #ifdef POSIX
 	fprintf(stderr, "%s", theBuf);
 	fprintf(stderr, "\n");
+	return true;
 #else
 	if ( !auto_init() ) { return false; }
 	
