@@ -165,8 +165,9 @@ bool Sender::send(int mode,const char* iString)
 bool Sender::send_to_window(const int mode,const char* theBuf)
 {
 #ifdef POSIX
-	fprintf(stderr, theBuf);
+	fprintf(stderr, "%s", theBuf);
 	fprintf(stderr, "\n");
+	return true;
 #else
 	if ( !auto_init() ) { return false; }
 	
