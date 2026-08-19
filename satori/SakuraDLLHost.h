@@ -30,7 +30,7 @@ public:
             return;
         }
         delete m_dll[id];
-        m_dll.erase(m_dll.begin() + id);
+        m_dll[id] = NULL;
     }
 	static SakuraDLLHost* I() { return m_dll[m_id]; }
 #else
