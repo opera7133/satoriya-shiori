@@ -4,7 +4,12 @@
 using namespace std;
 #include	"charset.h"
 #include    <locale.h>
-#include    <mbctype.h>
+#ifdef POSIX
+#include <strings.h>
+#define _strnicmp strncasecmp
+#else
+#include <mbctype.h>
+#endif
 
 //////////DEBUG/////////////////////////
 #include "warning.h"
@@ -36,12 +41,12 @@ static const char* stristr(const char* p, const char* substr) {
 
 
 typedef	unsigned short	word;
-typedef	unsigned char	byte;
+typedef	unsigned char	satori_byte;
 
 
 word sjis2jis(word ch){
-    byte leader  = (ch >> 8);
-    byte trailer = (ch & 0xFF);
+    satori_byte leader  = (ch >> 8);
+    satori_byte trailer = (ch & 0xFF);
 
     if(leader <= 0x9F)  leader -= 0x71;
     else                leader -= 0xB1;
@@ -58,8 +63,8 @@ word sjis2jis(word ch){
 }
 
 word jis2sjis(word ch){
-    byte leader  = (ch >> 8);
-    byte trailer = (ch & 0xFF);
+    satori_byte leader  = (ch >> 8);
+    satori_byte trailer = (ch & 0xFF);
 
     if((leader & 0x01) != 0)    trailer += 0x1F;
     else                        trailer += 0x7D;
@@ -96,7 +101,7 @@ string	jis2euc(const string& in)
 
 		if ( escaped && p[1]!='\0' )
 		{
-			word	wd = (byte(p[0])<<8) + byte(p[1]);
+			word	wd = (satori_byte(p[0])<<8) + satori_byte(p[1]);
 			wd = jis2euc(wd);
 			out.put(wd/256);
 			out.put(wd%256);
@@ -117,7 +122,7 @@ string	euc2sjis(const string& in) {
 		if ( isascii(p[0]) || p[0]=='\n' || p[1]=='\0' )
 			out.put(*p++);
 		else {
-			word	wd = (byte(p[0])<<8) + byte(p[1]);
+			word	wd = (satori_byte(p[0])<<8) + satori_byte(p[1]);
 			wd = euc2sjis(wd);
 			out.put(wd/256);
 			out.put(wd%256);
@@ -134,7 +139,7 @@ string  sjis2euc(const string& in) {
 		if ( isascii(p[0]) || p[0]=='\n' || p[1]=='\0' )
 			out.put(*p++);
 		else {
-			word	wd = (byte(p[0])<<8) + byte(p[1]);
+			word	wd = (satori_byte(p[0])<<8) + satori_byte(p[1]);
 			wd = sjis2euc(wd);
 			out.put(wd/256);
 			out.put(wd%256);
@@ -167,7 +172,7 @@ string	jis2sjis(const string& in) {
 		if ( !escaped || p[1]=='\0' )
 			out.put(*p++);
 		else {
-			word	wd = (byte(p[0])<<8) + byte(p[1]);
+			word	wd = (satori_byte(p[0])<<8) + satori_byte(p[1]);
 			wd = jis2sjis(wd);
 			out.put(wd/256);
 			out.put(wd%256);
@@ -181,7 +186,7 @@ string	jis2sjis(const string& in) {
 
 
 
-inline bool area(byte c, int min, int max) { return ( c>=min && c<=max ); }
+inline bool area(satori_byte c, int min, int max) { return ( c>=min && c<=max ); }
 
 
 inline int stricmp_head(const char* lhs, const char* rhs) {
@@ -239,7 +244,7 @@ CharactorSet	getCharactorSet(const char* const iString) {
 		else if ( p[0]==0x1b && p[1]=='(' && p[2]=='H' ) return CS_JIS;
 		else if ( p[0]==0x1b && p[1]=='(' && p[2]=='B' ) return CS_JIS;
 		else if ( p[0]==0x1b && p[1]=='(' && p[2]=='I' ) return CS_JIS;
-		else if ( byte(p[0])>0xa0 && byte(p[0])<0xe0 ) break;	// jisには出現しないコード
+		else if ( satori_byte(p[0])>0xa0 && satori_byte(p[0])<0xe0 ) break;	// jisには出現しないコード
 		else ++p;
 	}
 
@@ -248,11 +253,11 @@ CharactorSet	getCharactorSet(const char* const iString) {
 	while (*p!=NULL) {
 		if ( isascii(p[0]) )
 			++p;
-		else if ( area(byte(p[0]),0x81,0x9f) )
+		else if ( area(satori_byte(p[0]),0x81,0x9f) )
 			return	CS_SJIS;
-		else if ( area(byte(p[0]),0xa1,0xdf) && ( isascii(p[1]) || area(byte(p[1]),0x80,0xa0) ) )
+		else if ( area(satori_byte(p[0]),0xa1,0xdf) && ( isascii(p[1]) || area(satori_byte(p[1]),0x80,0xa0) ) )
 			return	CS_SJIS;
-		else if ( area(byte(p[0]),0xf0,0xfe) )
+		else if ( area(satori_byte(p[0]),0xf0,0xfe) )
 			return	CS_EUC;
 		else
 			++p;
@@ -312,7 +317,7 @@ string	 unification_return_code_for_windows(const string& in) {
 
 
 // Shift-JISの１バイト目たりうる文字か？
-inline bool is_sjis1st(byte c) { return ((unsigned int) (c ^ 0x20) - 0xa1 < 0x3c); }
+inline bool is_sjis1st(satori_byte c) { return ((unsigned int) (c ^ 0x20) - 0xa1 < 0x3c); }
 
 // JISコードのエスケープ文字列
 static const char* SHIFT2B = "\x1b\x24\x42"; // ２バイトへ
@@ -324,8 +329,8 @@ string sjis2jis(const string& in)
 	bool shift = false;
 	for(int i=0; i < in.size(); ++i)
 	{
-		byte c0 = in[i];
-		byte c1 = in[i+1];
+		satori_byte c0 = in[i];
+		satori_byte c1 = in[i+1];
 
 		if (is_sjis1st(c0))
 		{
@@ -367,8 +372,8 @@ string euc2jis(const string& in)
 	bool shift = false;
 	for(int i=0; i < in.size(); ++i)
 	{
-		byte c0 = in[i];
-		byte c1 = in[i+1];
+		satori_byte c0 = in[i];
+		satori_byte c1 = in[i+1];
 		
 		//if ( (c0 >= 0x00 && c0 <=0x7F) || c1 == '\0' ) // c0 >= 0x00 is always true
 		if ( c0 <=0x7F || c1 == '\0' )
@@ -480,7 +485,7 @@ char *CUnicodeF::utf16be_to_sjis(const wchar_t *pUcsStr, int *nBytesOut)
     nLen = wcslen( pUcsStr);
 
     if ( pUcsStr[0] == 0xfeff || pUcsStr[0] == 0xfffe) {
-        pUcsStr++; // 先頭にBOM(byte Order Mark)があれば，スキップする
+        pUcsStr++; // 先頭にBOM(satori_byte Order Mark)があれば，スキップする
         nLen--;
     }
 

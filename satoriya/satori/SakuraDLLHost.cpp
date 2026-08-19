@@ -39,7 +39,7 @@ extern "C" int satori_load(char* i_data, long i_data_len) {
     return id;
 }
 
-extern "C" int load(char* i_data, long i_data_len) {
+extern "C" int satori_legacy_load(char* i_data, long i_data_len) {
 //	GetSender().initialize();
     string the_base_folder(i_data, i_data_len);
     free(i_data);
@@ -65,7 +65,7 @@ extern "C" int satori_unload(int id)
     return ret;
 }
 
-extern "C" int unload(void)
+extern "C" int satori_legacy_unload(void)
 #else
 extern "C" __declspec(dllexport) BOOL __cdecl unload(void)
 #endif
@@ -90,7 +90,7 @@ extern "C" char* satori_request(int id, char* i_data, long* io_data_len) {
     return the_return_data;
 }
 
-extern "C" char* request(char* i_data, long* io_data_len) {
+extern "C" char* satori_legacy_request(char* i_data, long* io_data_len) {
     // ƒOƒ[ƒoƒ‹ƒƒ‚ƒŠ‚ğó‚¯‚Æ‚é
     string the_req_str(i_data, *io_data_len);
     free(i_data);
