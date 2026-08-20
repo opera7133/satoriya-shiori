@@ -15,6 +15,9 @@
 #include	"shiori_plugin.h"
 #include	"console_application.h"
 #include	"ssu.h"
+#ifdef POSIX
+#include "../../NativeSystemInfoSaori.h"
+#endif
 #include	<sstream>
 using std::string;
 
@@ -126,6 +129,13 @@ bool ShioriPlugins::load_a_plugin(const string& iPluginLine)
 			mDllData[fullpath].mRefCount=1;
 			mDllData[fullpath].m_pSaoriClient=new ssu();
 		}
+#ifdef POSIX
+		else if ( compare_tail(fullpath, "\\saori_cpuid.dll") || compare_tail(fullpath, "/saori_cpuid.dll") )
+		{
+			mDllData[fullpath].mRefCount=1;
+			mDllData[fullpath].m_pSaoriClient=new NativeSystemInfoSaori();
+		}
+#endif
 		else {
 #ifndef POSIX
 			// ネットワーク更新時、SAORI.dllが上書きできずdl2として保存される問題に暫定対処
