@@ -18,6 +18,7 @@
 #ifdef POSIX
 #include "../../NativeSystemInfoSaori.h"
 #include "../../NativeKeywordSaori.h"
+#include "../../NativeSwiftSaori.h"
 #endif
 #include	<sstream>
 using std::string;
@@ -141,6 +142,11 @@ bool ShioriPlugins::load_a_plugin(const string& iPluginLine)
 			mDllData[fullpath].mRefCount=1;
 			mDllData[fullpath].m_pSaoriClient=new NativeKeywordSaori();
 			mDllData[fullpath].m_pSaoriClient->load("", "Shift_JIS", "", fullpath);
+		}
+		else if ( compare_tail(fullpath, "\\mciaudior.dll") || compare_tail(fullpath, "/mciaudior.dll") || compare_tail(fullpath, "\\wmove.dll") || compare_tail(fullpath, "/wmove.dll") || compare_tail(fullpath, "\\textcopy2.dll") || compare_tail(fullpath, "/textcopy2.dll") )
+		{
+			mDllData[fullpath].mRefCount=1;
+			mDllData[fullpath].m_pSaoriClient=new NativeSwiftSaori(fullpath);
 		}
 #endif
 		else {
