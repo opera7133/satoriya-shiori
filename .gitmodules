@@ -1,0 +1,3 @@
+[submodule "deelx"]
+	path = deelx
+	url = https://github.com/ponapalt/deelx
