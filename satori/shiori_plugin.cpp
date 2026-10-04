@@ -137,6 +137,10 @@ bool ShioriPlugins::load_a_plugin(const wstring& iPluginLine)
 		else if (true) {
 			mDllData[fullpath].mRefCount=1;
 			mDllData[fullpath].m_pSaoriClient=new NativeSwiftSaori(fullpath);
+			if (!mDllData[fullpath].m_pSaoriClient->load(L"SATORI", L"UTF-8", L"", fullpath)) {
+				mDllData.erase(fullpath);
+				return false;
+			}
 		}
 #endif
 		else {
