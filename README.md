@@ -28,12 +28,12 @@
 
 バージョンは `McXYY-Z` の形で、X が版の種類を表します。
 
-| 版 | バージョン | ブランチ | 状態 |
-|----|------------|----------|------|
-| ACP 版（Shift_JIS ベース） | `Mc1YY-Z` | `master` | 安定版 |
-| Unicode 版 | `Mc2YY-Z` | `unicode` | 試験版（Releases では Pre-release） |
+| 版 | バージョン | ブランチ |
+|----|------------|----------|
+| ACP 版（Shift_JIS ベース） | `Mc1YY-Z` | `master` |
+| Unicode 版 | `Mc2YY-Z` | `unicode` |
 
-Unicode 版では、UTF-8 の辞書が使えるほか、サロゲートペアなどを 1 文字として扱えます。ACP 版との違いは [ACP 版との違い](https://ukatech.github.io/satori-docs/other/unicode-changes/) を、試験版の動作確認のお願いと報告先は [里々 Unicode 版 試験版 ─ 動作確認のお願い](https://ukatech.github.io/satori-docs/other/satori2-prerelease/) を参照してください。
+Unicode 版では、UTF-8 の辞書が使えるほか、サロゲートペアなどを 1 文字として扱えます。ACP 版との違いは [ACP 版との違い](https://ukatech.github.io/satori-docs/other/unicode-changes/) を参照してください。
 
 ## リポジトリの構成
 
@@ -59,7 +59,7 @@ msdev satori.dsw /MAKE "ssu - Win32 Release" /REBUILD
 
 出力先は satori が `Release\`、satorite が `Release_ST\`、ssu が `Release_SU\` です。ビルド後に `satoriya\make_satori.ps1` を実行すると、`satoriya\tmp\satori.zip` ができます（7-Zip が必要です）。
 
-POSIX 環境向けの `makefile.posix` などもありますが、主に保守しているのは Windows（VC6）版です。
+POSIX 環境向けには Linux 用の `makefile.linux`、macOS 用の `makefile.posix` などもありますが、主に保守しているのは Windows（VC6）版です。
 
 ソースの文字コードは Shift_JIS、改行は CRLF です。編集するときはこれを保ってください。
 
