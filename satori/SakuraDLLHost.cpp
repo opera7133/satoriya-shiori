@@ -40,8 +40,12 @@ static std::string	to_bytes(const char* p, long len)
 
 #ifdef POSIX
 
+// makefile は -fvisibility=hidden でビルドするので、ホストから呼ばれる入口だけ公開する。
+// 内部の関数（mt19937ar など）が、ホストや他のライブラリの同名のものと入れ替わらないように。
+#define SATORI_EXPORT __attribute__((visibility("default")))
+
 // POSIXではパスはUTF-8で渡される
-extern "C" int satori_load(char* i_data, long i_data_len) {
+extern "C" SATORI_EXPORT int satori_load(char* i_data, long i_data_len) {
 //	GetSender().initialize();
     wstring the_base_folder = UTF8toW(to_bytes(i_data, i_data_len));
     free(i_data);
@@ -52,7 +56,7 @@ extern "C" int satori_load(char* i_data, long i_data_len) {
     return id;
 }
 
-extern "C" int satori_legacy_load(char* i_data, long i_data_len) {
+extern "C" SATORI_EXPORT int satori_legacy_load(char* i_data, long i_data_len) {
 //	GetSender().initialize();
     wstring the_base_folder = UTF8toW(to_bytes(i_data, i_data_len));
     free(i_data);
@@ -107,7 +111,7 @@ extern "C" __declspec(dllexport) BOOL __cdecl logsend(long hwnd)
 
 // ログをコールバックで受け取る（YAYA互換）。設定中は logsend のウィンドウには送らない
 #ifdef POSIX
-extern "C" void Set_loghandler(void (*loghandler)(const wchar_t *str, int mode, int id))
+extern "C" SATORI_EXPORT void Set_loghandler(void (*loghandler)(const wchar_t *str, int mode, int id))
 #else
 extern "C" __declspec(dllexport) void __cdecl Set_loghandler(void (*loghandler)(const wchar_t *str, int mode, int id))
 #endif
@@ -116,15 +120,17 @@ extern "C" __declspec(dllexport) void __cdecl Set_loghandler(void (*loghandler)(
 }
 
 #ifdef POSIX
-extern "C" int satori_unload(int id)
+extern "C" SATORI_EXPORT int satori_unload(int id)
 {
-    SakuraDLLHost::Select(id);
+    if ( ! SakuraDLLHost::Select(id) ) {
+        return 0;
+    }
 	int ret = SakuraDLLHost::I()->unload();
     SakuraDLLHost::Destroy(id);
     return ret;
 }
 
-extern "C" int satori_legacy_unload(void)
+extern "C" SATORI_EXPORT int satori_legacy_unload(void)
 #else
 extern "C" __declspec(dllexport) BOOL __cdecl unload(void)
 #endif
@@ -150,12 +156,15 @@ static char* return_bytes(const std::string& the_resp_str, long* io_data_len)
     return the_return_data;
 }
 
-extern "C" char* satori_request(int id, char* i_data, long* io_data_len) {
+extern "C" SATORI_EXPORT char* satori_request(int id, char* i_data, long* io_data_len) {
     // グローバルメモリを受けとる
     std::string the_req_str(i_data, *io_data_len);
     free(i_data);
 
-    SakuraDLLHost::Select(id);
+    if ( ! SakuraDLLHost::Select(id) ) {
+        *io_data_len = 0;
+        return NULL;
+    }
     // リクエスト実行
     std::string the_resp_str = SakuraDLLHost::I()->request_bytes(the_req_str);
 
@@ -163,7 +172,7 @@ extern "C" char* satori_request(int id, char* i_data, long* io_data_len) {
     return return_bytes(the_resp_str, io_data_len);
 }
 
-extern "C" char* satori_legacy_request(char* i_data, long* io_data_len) {
+extern "C" SATORI_EXPORT char* satori_legacy_request(char* i_data, long* io_data_len) {
     // グローバルメモリを受けとる
     std::string the_req_str(i_data, *io_data_len);
     free(i_data);
@@ -214,11 +223,24 @@ extern "C" __declspec(dllexport) HGLOBAL __cdecl getversionlist(HGLOBAL i_data, 
 #endif
 
 
+static bool	is_ascii_only(const std::string& i_bytes)
+{
+	for ( std::string::const_iterator i = i_bytes.begin() ; i != i_bytes.end() ; ++i ) {
+		if ( static_cast<unsigned char>(*i) >= 0x80 ) { return false; }
+	}
+	return true;
+}
+
 std::string SakuraDLLHost::request_bytes(const std::string& i_request_bytes)
 {
 	CharactorSet cs = CharsetFromName(UTF8toW(find_charset_header(i_request_bytes)));
 	if ( cs == CS_NULL ) {
 		cs = DetectCharset(i_request_bytes);
+		if ( cs == CS_UTF8 && is_ascii_only(i_request_bytes) ) {
+			// Charsetヘッダが無くASCIIだけの要求は、文字コードを申告しない古い呼び出し元（SHIORI/2.x、SAORI/1.0など）。
+			// 返答の日本語はmaster版と同じくShift_JISにする。
+			cs = CS_SJIS;
+		}
 	}
 	wstring the_response = request(MBtoW(i_request_bytes, cs), cs);
 

@@ -10,7 +10,6 @@ void	Satori::InitMembers() {
 	mIsMateria = false;
 	mIsStatusHeaderExist = false;
 	mRequestMode = UNKNOWN;
-	mOSType = SATORI_OS_UNDEFINED;
 	mikire_flag = false;
 	kasanari_flag = false;
 	can_talk_flag = false;
@@ -167,6 +166,7 @@ void	Satori::InitMembers() {
 
 	mReferences.clear();
 	mKakkoCallResults.clear();
+	mLastSSTPResponseCode = 0;
 
 	mLoopCounters.clear();
 

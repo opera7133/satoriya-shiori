@@ -1,5 +1,6 @@
 #include	"stltool.h"
 #include	<sstream>
+#include	<locale.h>
 #include	<cassert>
 #include	"charset.h"
 
@@ -141,6 +142,14 @@ bool	bytes_from_file(std::string& o, const wstring& iFileName) {
 	FILE*	fp = w_fopen(iFileName, L"rb");
 	if ( fp == NULL )
 		return	false;
+	// 追記のたびに領域を取り直さないよう、先にファイルの大きさ分を確保する。
+	if ( fseek(fp, 0, SEEK_END) == 0 ) {
+		long	size = ftell(fp);
+		if ( size > 0 ) {
+			o.reserve(o.size() + size);
+		}
+		fseek(fp, 0, SEEK_SET);
+	}
 	char	buf[4096];
 	size_t	n;
 	while ( (n = fread(buf, 1, sizeof(buf), fp)) > 0 ) {
@@ -228,6 +237,14 @@ bool	strvec_to_file(
 	CharactorSet cs)
 {
 	std::string	bytes;
+	{
+		// 1文字は最大3バイト（UTF-8）。行ごとの追記で領域を取り直さないよう先に確保する。
+		size_t	reserve_size = 0;
+		for ( strvec::const_iterator it=vec.begin() ; it!=vec.end() ; ++it ) {
+			reserve_size += it->size() * 3 + 2;
+		}
+		bytes.reserve(reserve_size);
+	}
 	for ( strvec::const_iterator it=vec.begin() ; it!=vec.end() ; ++it ) {
 		bytes += WtoMB(*it, cs);
 		bytes += FILE_NEWLINE;
@@ -271,15 +288,6 @@ bool	strmap_to_file(const strmap& oMap, const wstring& iFileName, const wstring&
 	return	strvec_to_file(lines, iFileName, cs);
 }
 
-
-wstring	get_a_chr(const wchar_t*& p) {
-	if ( *p==L'\0' )
-		return	L"";
-	const wchar_t*	start = p++;
-	if ( IsHighSurrogate(*start) && IsLowSurrogate(*p) )
-		++p;
-	return	wstring(start, p);
-}
 
 size_t	count_chars(const wstring& str) {
 	size_t	n = 0;
@@ -344,6 +352,7 @@ std::string	encode(const std::string& s) {
 	const char*	p = s.c_str();
 	int	len = s.size();
 	std::string	ret;
+	ret.reserve(len);
 
 	for ( int n=0 ; n<len/2 ; ++n ) {
 		ret += p[n];
@@ -358,6 +367,7 @@ std::string	decode(const std::string& s) {
 	const char*	p = s.c_str();
 	int	len = s.size();
 	std::string	ret;
+	ret.reserve(len);
 
 	for ( int n=0 ; n<len ; n+=2 ) ret += p[n];
 	for ( int m=len-((len&1)?2:1) ; m>=0 ; m-=2 ) ret += p[m];
@@ -651,5 +661,49 @@ int zen2int(const wchar_t *str)
 unsigned long zen2ul(const wchar_t *str)
 {
 	return stoui(zen2han(str));
+}
+
+// ロケールの小数点。ASCII 1文字以外（多バイトなど）は扱わず . とみなす
+static char	locale_decimal_point()
+{
+	const struct lconv*	lc = localeconv();
+	if ( lc != NULL && lc->decimal_point != NULL && lc->decimal_point[0] != '\0'
+	  && lc->decimal_point[1] == '\0' && static_cast<unsigned char>(lc->decimal_point[0]) < 0x80 ) {
+		return lc->decimal_point[0];
+	}
+	return '.';
+}
+
+double	wcstod_dot(const wchar_t* s)
+{
+	const wchar_t	dp = static_cast<wchar_t>(locale_decimal_point());
+	if ( dp == L'.' ) {
+		return wcstod(s, NULL);
+	}
+	// wcstod はロケールの小数点で読むので、. をそれに置き換えて渡す。
+	// ロケールの小数点そのもの（1,5 など）は . ではないので、そこで数を終わらせる
+	wstring	w(s);
+	const wstring::size_type	dot = w.find(L'.');
+	const wstring::size_type	loc = w.find(dp);
+	if ( loc != wstring::npos && (dot == wstring::npos || loc < dot) ) {
+		w.erase(loc);
+	}
+	else if ( dot != wstring::npos ) {
+		w[dot] = dp;
+	}
+	return wcstod(w.c_str(), NULL);
+}
+
+wstring	dtos_fixed(double d)
+{
+	char	buf[512];	// %f は double の最大値で 300 文字を超える
+	sprintf(buf, "%f", d);
+	const char	dp = locale_decimal_point();
+	if ( dp != '.' ) {
+		for ( char* p = buf ; *p != '\0' ; ++p ) {
+			if ( *p == dp ) { *p = '.'; break; }
+		}
+	}
+	return ascii_to_w(buf);
 }
 
