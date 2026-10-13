@@ -418,9 +418,6 @@ private:
 
 	// システム情報系 ----------
 
-//	enum { UNDEFINED, WIN95, WIN98, WINME, WINNT, WIN2K, WINXP } mOSType;
-	enum { SATORI_OS_UNDEFINED, SATORI_OS_WIN95, SATORI_OS_WIN98, SATORI_OS_WINME, SATORI_OS_WINNT, SATORI_OS_WIN2K, SATORI_OS_WINXP } mOSType;
-
 #ifndef POSIX
 	// マルチモニタ
 	bool	is_single_monitor;	// 最上位。これがfalseならば以下を使ってはいけない
@@ -430,6 +427,11 @@ private:
 
 	//HWNDテーブル(POSIXにはHWNDはないのでvoid*とする)
 	std::map<int, void*>	characters_hwnd;
+
+	// 本体へ EXECUTE SSTP を送る（satori_builtin.cpp）。i_name はログに出す関数名。
+	// 戻り値は応答コード（送れなかったときは0）で、mLastSSTPResponseCode にも残す。o_lines は応答の追加データ。
+	int		ExecuteSSTP(const wstring& i_name, const wstring& i_command, const strvec& i_references, strvec& o_lines);
+	int		mLastSSTPResponseCode;
 
 	// ループ時のカウンタ参照用
 	simple_stack<wstring> mLoopCounters; //バグを誘発させそうなのでstring
@@ -531,6 +533,7 @@ private:
 	wstring	func_remove_all_added_words(const strvec& iArgv, bool for_calc, bool for_non_talk);
 	wstring	func_get_property(const strvec& iArgv, bool for_calc, bool for_non_talk);
 	wstring	func_set_property(const strvec& iArgv, bool for_calc, bool for_non_talk);
+	wstring	func_execute_sstp(const strvec& iArgv, bool for_calc, bool for_non_talk);
 	wstring	func_load_saori(const strvec& iArgv, bool for_calc, bool for_non_talk);
 	// 特殊形式：引数を展開せずに受け取る
 	wstring	func_when(const strvec& iArgv, bool for_calc, bool for_non_talk);
@@ -559,6 +562,7 @@ private:
 	bool	var_random(const wstring& iName, const wstring& iArg, int iParam, wstring& oResult);
 	bool	var_isempty(const wstring& iName, const wstring& iArg, int iParam, wstring& oResult);
 	bool	var_argument_count(const wstring& iName, const wstring& iArg, int iParam, wstring& oResult);
+	bool	var_sstp_response_code(const wstring& iName, const wstring& iArg, int iParam, wstring& oResult);
 	bool	var_surface(const wstring& iName, const wstring& iArg, int iParam, wstring& oResult);
 	bool	var_last_exiting_surface(const wstring& iName, const wstring& iArg, int iParam, wstring& oResult);
 	bool	var_window_handle(const wstring& iName, const wstring& iArg, int iParam, wstring& oResult);
@@ -681,6 +685,10 @@ public:
 			characters_hwnd[0] = hWnd;
 		}
 	}
+
+	// SAORI over DirectSSTP の要求（UTF-8のバイト列）を本体へ送り、応答を受け取る（satori_builtin.cpp）。
+	// 送れなかった・応答が無かったときはfalse。
+	bool	SendSaoriDirectSSTP(const std::string& i_request, std::string& o_response);
 };
 
 //---------------------------------------------------------------------------
