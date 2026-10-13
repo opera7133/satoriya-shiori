@@ -46,6 +46,7 @@ namespace std {
 #include	<string>
 #include	<map>
 #include	<set>
+#include	<algorithm>
 #include	<vector>
 #include	<list>
 #include	<fstream>
@@ -120,6 +121,13 @@ inline unsigned long stoui(const wchar_t* s) { return wcstoul(s,NULL,10); }
 // 書式は数値1つを取るprintf書式（ASCIIのみ）
 inline wstring	itos(long i, const wchar_t* iFormat=L"%d") { char buf[64]; sprintf(buf,w_to_ascii(iFormat).c_str(),i); return ascii_to_w(buf); }
 inline wstring	uitos(unsigned long i, const wchar_t* iFormat=L"%u") { char buf[64]; sprintf(buf,w_to_ascii(iFormat).c_str(),i); return ascii_to_w(buf); }
+
+// 実数の読み書き。ロケールの小数点（localeconv）に依らず、常に . を小数点として扱う。
+// ホストが LC_NUMERIC を設定していると、wcstod や printf("%f") の小数点が , になるため。
+// wcstod_dot は小数点が . でない書き方（1,5 など）を数の途中で終わったものとして読む。
+// dtos_fixed は printf("%f") と同じ書式。
+double	wcstod_dot(const wchar_t* s);
+wstring	dtos_fixed(double d);
 
 inline bool stobool(const wchar_t *s) { return ( _wcsicmp(s,L"true") == 0 || _wtoi(s) != 0 ); }
 inline bool stobool(const wstring &s) { return stobool(s.c_str()); }
@@ -209,9 +217,6 @@ static const char	FILE_NEWLINE[] = "\n";
 static const char	FILE_NEWLINE[] = "\r\n";
 #endif
 
-// 一文字取得（サロゲートペアは1文字として扱う）
-wstring	get_a_chr(const wchar_t*& p);
-
 // 文字列の末尾に追加する。
 // VC6のbasic_stringは容量を32文字ずつしか増やさず、少しずつ追加すると長さの2乗の時間がかかるので、足りなければ倍々に確保する。
 inline wstring&	append_grow(wstring& s, const wchar_t* p, size_t n) {
@@ -226,7 +231,7 @@ inline wstring&	append_grow(wstring& s, const wstring& t) {
 }
 
 // 一文字（サロゲートペアは2単位）を、ヒープを使わずに持つ。
-// VC6のbasic_stringは1文字でもヒープを確保するので、1文字ずつ回すループでは get_a_chr の代わりに next_a_chr を使う。
+// VC6のbasic_stringは1文字でもヒープを確保するので、1文字ずつ回すループでは wstring ではなくこれを使う。
 class a_chr {
 	wchar_t	m_buf[3];
 	size_t	m_len;
@@ -239,10 +244,11 @@ public:
 	bool	operator==(const wchar_t* s) const { return wcscmp(m_buf, s) == 0; }
 	bool	operator!=(const wchar_t* s) const { return !(*this == s); }
 	bool	operator==(const wstring& s) const { return s.size() == m_len && wcscmp(m_buf, s.c_str()) == 0; }
+	bool	operator==(const a_chr& c) const { return m_len == c.m_len && wcscmp(m_buf, c.m_buf) == 0; }
 	bool	operator!=(const wstring& s) const { return !(*this == s); }
 };
 
-// 一文字取得（サロゲートペアは1文字として扱う）。get_a_chr と同じだが a_chr で返す。
+// 一文字取得（サロゲートペアは1文字として扱う）。p は一文字ぶん進む。
 inline a_chr	next_a_chr(const wchar_t*& p) {
 	a_chr	c;
 	if ( *p == L'\0' )
@@ -271,7 +277,7 @@ size_t	char_pos_to_index(const wstring& str, size_t char_pos);
 template<class T>
 int	split(const wchar_t* p, T& o) {
 	while ( *p != L'\0' )
-		o.push_back(get_a_chr(p));
+		o.push_back(next_a_chr(p).str());
 	return	o.size();
 }
 
@@ -284,9 +290,9 @@ inline int split(const wstring& i, T& o) {
 template<class T>
 int	split(const wchar_t* p, const wchar_t* dp, T& o, int max_words=0, bool split_one=false)
 {
-	std::set<wstring>	dlmt_set;
+	std::vector<a_chr>	dlmt_set;	// 区切り文字は少数なので線形探索（1文字ごとにヒープを使わないよう a_chr で持つ）
 	while ( *dp != L'\0' )
-		dlmt_set.insert(get_a_chr(dp));
+		dlmt_set.push_back(next_a_chr(dp));
 
 	if ( dlmt_set.empty() )
 		return	split(p, o);
@@ -298,8 +304,8 @@ int	split(const wchar_t* p, const wchar_t* dp, T& o, int max_words=0, bool split
 
 	wstring	word;
 	while ( *p != L'\0' ) {
-		wstring	c = get_a_chr(p);
-		if ( dlmt_set.find(c) != dlmt_set.end() ) {
+		a_chr	c = next_a_chr(p);
+		if ( std::find(dlmt_set.begin(), dlmt_set.end(), c) != dlmt_set.end() ) {
 			if ( word.size() > 0 || split_one ) {
 				o.push_back(word);
 
@@ -353,11 +359,11 @@ int	split_string(const wchar_t* p, const wchar_t* dp, T& o, int max_words=0, boo
 
 	wstring	word;
 	const wchar_t *dpr = dp;
-	wstring  dpc = get_a_chr(dpr); //とりあえず1文字目をとっておく
+	a_chr  dpc = next_a_chr(dpr); //とりあえず1文字目をとっておく
 	size_t  dpl = wcslen(dpr);
 
 	while ( *p != L'\0' ) {
-		wstring	c = get_a_chr(p);
+		a_chr	c = next_a_chr(p);
 
 		if ( c == dpc && wcsncmp(p,dpr,dpl) == 0 ) { //strncmpで2文字目以降を単純比較マッチ
 			if ( word.size() > 0 || split_one ) {
@@ -462,16 +468,16 @@ int	combine(wstring& out, const T& in, const wstring& dlmt=L"", bool add_dlmt_on
 	typename T::const_iterator i=in.begin();
 	if ( add_dlmt_on_final ) {
 		for (; i!=in.end() ;++i) {
-			out += *i;
-			out += dlmt;
+			append_grow(out, *i);
+			append_grow(out, dlmt);
 		}
 	}
 	else {
 		int	size=in.size();
 		for (int n=0 ; n<size ; ++n,++i) {
-			out += *i;
+			append_grow(out, *i);
 			if (n<size-1)
-				out += dlmt;
+				append_grow(out, dlmt);
 		}
 	}
 	return	out.size();
