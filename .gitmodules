@@ -1,0 +1,3 @@
+[submodule "uka_regexp"]
+	path = uka_regexp
+	url = https://github.com/ukatech/uka_regexp.git
