@@ -29,7 +29,7 @@ public:
 	virtual wstring get_version(const wstring& i_security_level);
 
 	// 直前のget_versionの応答に、空でないCharsetヘッダがあったか。
-	bool version_reply_has_charset() const { return m_version_reply_has_charset; }
+	virtual bool version_reply_has_charset() const { return m_version_reply_has_charset; }
 
 	// 直前のget_versionの応答のCharsetヘッダの値。無ければ空。
 	const wstring& version_reply_charset() const { return m_version_reply_charset; }

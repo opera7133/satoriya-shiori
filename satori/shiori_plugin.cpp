@@ -15,6 +15,9 @@
 #include	"shiori_plugin.h"
 #include	"console_application.h"
 #include	"ssu.h"
+#ifdef POSIX
+#include "../../NativeSwiftSaori.h"
+#endif
 #include	<sstream>
 using std::wstring;
 
@@ -272,7 +275,16 @@ bool ShioriPlugins::load_a_plugin(const wstring& iPluginLine)
 				else { mDllData[fullpath].mIsInternal = true; }
 			}
 		}
-#ifndef POSIX
+#ifdef POSIX
+		else if (true) {
+			mDllData[fullpath].mRefCount=1;
+			mDllData[fullpath].m_pSaoriClient=new NativeSwiftSaori(fullpath);
+			if (!mDllData[fullpath].m_pSaoriClient->load(L"SATORI", L"UTF-8", L"", fullpath)) {
+				mDllData.erase(fullpath);
+				return false;
+			}
+		}
+#else
 		else if ( find_direct_sstp_module(fullpath, direct_module) ) {
 			// SAORI over DirectSSTP：本体が内蔵するモジュール。呼び出しのたびに本体へ要求を送る
 			mDllData[fullpath].mRefCount=1;
