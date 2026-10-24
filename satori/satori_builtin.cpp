@@ -12,6 +12,7 @@
 #include	"../_/Utilities.h"
 #include	"posix_utils.h"
 #include	<time.h>
+#include	<math.h>
 #ifndef POSIX
 #include	<tlhelp32.h>
 #else
@@ -24,6 +25,7 @@
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
 
@@ -416,8 +418,10 @@ wstring	Satori::func_loop(const strvec& iArgv, bool, bool)
 			return	L"";
 		for (int i=init ; ; ) {
 			variables[name+L"カウンタ"] = itos(i);
-			if ( !Call(name, temp) )
+			if ( !Call(name, temp) ) {
+				variables.erase(name+L"カウンタ");
 				return	L"";
+			}
 			ret += temp;
 			if ( loop_result_too_large(ret) )
 				break;
@@ -434,8 +438,10 @@ wstring	Satori::func_loop(const strvec& iArgv, bool, bool)
 		const unsigned int down = ( step==INT_MIN ) ? static_cast<unsigned int>(INT_MAX) : static_cast<unsigned int>(-step);
 		for (int i=init ; ; ) {
 			variables[name+L"カウンタ"] = itos(i);
-			if ( !Call(name, temp) )
+			if ( !Call(name, temp) ) {
+				variables.erase(name+L"カウンタ");
 				return	L"";
+			}
 			ret += temp;
 			if ( loop_result_too_large(ret) )
 				break;
@@ -660,7 +666,10 @@ wstring	Satori::func_byte_value(const strvec& iArgv, bool, bool)
 		if ( cp >= 0xD800 && cp <= 0xDFFF ) {
 			return L"";	// サロゲート単体は文字ではない
 		}
-		if ( sizeof(wchar_t) == 2 && cp >= 0x10000 && cp <= 0x10FFFF ) {
+		if ( cp > 0x10FFFF ) {
+			return L"";	// Unicodeの範囲外
+		}
+		if ( sizeof(wchar_t) == 2 && cp >= 0x10000 ) {
 			cp -= 0x10000;
 			r += (wchar_t)(0xD800 + (cp >> 10));
 			r += (wchar_t)(0xDC00 + (cp & 0x3FF));
@@ -906,7 +915,7 @@ static int ParseExecuteResponse(const std::string& i_bytes, strvec& o_lines)
 
 #ifdef POSIX
 
-static std::string SendDataUsingUnixSocket(const std::string &path, const std::string &request, bool has_header) {
+static std::string SendDataUsingUnixSocket(const std::string &path, const std::string &request, bool has_header, unsigned timeout_ms) {
 	sockaddr_un addr = {};
 	if (path.length() >= sizeof(addr.sun_path)) {
 		return "";
@@ -922,7 +931,27 @@ static std::string SendDataUsingUnixSocket(const std::string &path, const std::s
 		close(soc);
 		return "";
 	}
-	if (send(soc, request.data(), request.size(), 0) != static_cast<ssize_t>(request.size())) {
+	// 相手が応答しなくても SHIORI が止まらないよう、送受信に時間制限をつける
+	{
+		timeval tv;
+		tv.tv_sec = static_cast<time_t>(timeout_ms / 1000);
+		tv.tv_usec = static_cast<suseconds_t>((timeout_ms % 1000) * 1000);
+		setsockopt(soc, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+		setsockopt(soc, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+	}
+	// 相手が閉じていても SIGPIPE でホストが落ちないようにする
+#if defined(MSG_NOSIGNAL)
+	const int sendflags = MSG_NOSIGNAL;
+#else
+	const int sendflags = 0;
+#	if defined(SO_NOSIGPIPE)
+	{
+		int on = 1;
+		setsockopt(soc, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+	}
+#	endif
+#endif
+	if (send(soc, request.data(), request.size(), sendflags) != static_cast<ssize_t>(request.size())) {
 		close(soc);
 		return "";
 	}
@@ -931,9 +960,15 @@ static std::string SendDataUsingUnixSocket(const std::string &path, const std::s
 	std::string data;
 	uint32_t remain = 0;
 	if (has_header) {
-		if (read(soc, buffer, sizeof(uint32_t)) != sizeof(uint32_t)) {
-			close(soc);
-			return "";
+		// 4バイトが分割して届くこともあるので揃うまで読む
+		size_t got = 0;
+		while (got < sizeof(uint32_t)) {
+			ssize_t r = read(soc, buffer + got, sizeof(uint32_t) - got);
+			if (r <= 0) {
+				close(soc);
+				return "";
+			}
+			got += static_cast<size_t>(r);
 		}
 		memcpy(&remain, buffer, sizeof(remain));
 		if (remain <= 0x1000000) { // 相手の申告した長さをそのまま確保しない
@@ -986,7 +1021,7 @@ static bool FindNinixSocket(const void* i_target, std::string& o_path)
 		return false;
 	}
 
-	const std::string fmo = SendDataUsingUnixSocket(sockdir + "ninix", "GetFMO\r\n", true);
+	const std::string fmo = SendDataUsingUnixSocket(sockdir + "ninix", "GetFMO\r\n", true, 5000);
 	const long target = reinterpret_cast<long>(i_target);
 	std::istringstream iss(fmo);
 	std::string line;
@@ -1020,7 +1055,7 @@ static bool SendExecuteSSTP(const void* i_target, const std::string& i_request, 
 	if (!FindNinixSocket(i_target, path)) {
 		return false;
 	}
-	o_response = SendDataUsingUnixSocket(path, i_request, false);
+	o_response = SendDataUsingUnixSocket(path, i_request, false, i_timeout_ms);
 	return !o_response.empty();
 }
 
@@ -1288,6 +1323,9 @@ wstring	Satori::func_times(const strvec& iArgv, bool for_calc, bool for_non_talk
 			// max += count が int を越えないように（越えるときは上限にする）
 			if ( count > 0 && max > INT_MAX - count ) {
 				max = INT_MAX;
+			}
+			else if ( count < 0 && max < INT_MIN - count ) {
+				max = INT_MIN;
 			}
 			else {
 				max += count;
@@ -1703,6 +1741,17 @@ bool	Satori::var_seconds_from_last_talk(const wstring&, const wstring&, int, wst
 	return	true;
 }
 
+// bottom～top（bottom <= top）の乱数。幅が int を越えるときは double で求める（VC6には long long が無い）。
+static int	random_between(int bottom, int top)
+{
+	const double range = static_cast<double>(top) - bottom + 1;
+	if ( range <= INT_MAX ) {
+		return random(static_cast<int>(range)) + bottom;
+	}
+	// gen_random() は 0～2^31-1
+	return static_cast<int>(floor(bottom + static_cast<double>(gen_random()) / 2147483648.0 * range));
+}
+
 // 乱数m～n
 bool	Satori::var_random(const wstring&, const wstring& iArg, int, wstring& oResult)
 {
@@ -1725,13 +1774,13 @@ bool	Satori::var_random(const wstring&, const wstring& iArg, int, wstring& oResu
 			if ( bottom == top )
 				oResult = int2zen(top);
 			else
-				oResult = int2zen( random(top-bottom+1) + bottom );
+				oResult = int2zen( random_between(bottom, top) );
 		}
 		else {
 			if ( bottom == top )
 				oResult = itos(top);
 			else
-				oResult = itos( random(top-bottom+1) + bottom );
+				oResult = itos( random_between(bottom, top) );
 		}
 	}
 	return	true;
@@ -2210,6 +2259,7 @@ unsigned long Satori::FindProcessName(const wchar_t* txt,bool isPartial)
 	if ( ! txt || ! *txt ) { return 0; }
 
 	HANDLE hSnap = ::CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0);
+	if ( hSnap == INVALID_HANDLE_VALUE ) { return 0; }
 
 	PROCESSENTRY32 pinfo = {0};
 	pinfo.dwSize = sizeof(pinfo);
@@ -2406,6 +2456,7 @@ int	Satori::system_variable_operation_real(wstring key, wstring value, wstring* 
 static int	talk_interval_count_from(int talk_interval, int talk_interval_random)
 {
 	int	dist = static_cast<int>(talk_interval*(talk_interval_random/100.0));
+	if ( dist > INT_MAX/2 ) dist = INT_MAX/2;	// dist*2 が int を越えないように
 	return ( dist==0 ) ? talk_interval : (talk_interval-dist)+(random(dist*2));
 }
 
